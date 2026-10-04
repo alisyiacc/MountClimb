@@ -1,33 +1,53 @@
 import 'package:flutter/material.dart';
 import '../models/mountain.dart';
+import '../services/booking_service.dart';
+import '../utils/format.dart';
+import '../widgets/app_image.dart';
 import 'hiker_data_page.dart';
 
-// Ticket Page: menampilkan pilihan tanggal & jumlah pendaki secara VISUAL
-// (tanpa state, sesuai ketentuan tahap awal). Nilai yang ditandai "terpilih"
-// bersifat tetap/dummy karena halaman ini StatelessWidget.
-class TicketPage extends StatelessWidget {
+// Ticket Page: pilih tanggal & jumlah pendaki (state disimpan di HP),
+// harga dihitung langsung dari harga gunung yang berasal dari database.
+class TicketPage extends StatefulWidget {
   final Mountain mountain;
 
   const TicketPage({super.key, required this.mountain});
 
-  static const int selectedHikerCount = 2;
-  static const String selectedDateLabel = '15 Okt';
-  static const String selectedDateFull = '15 Oktober 2026';
+  @override
+  State<TicketPage> createState() => _TicketPageState();
+}
 
-  String _formatPrice(int price) {
-    final str = price.toString();
-    final buffer = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      final posFromRight = str.length - i;
-      buffer.write(str[i]);
-      if (posFromRight > 1 && posFromRight % 3 == 1) buffer.write('.');
-    }
-    return 'Rp$buffer';
+class _TicketPageState extends State<TicketPage> {
+  static const int _minHikers = 1;
+  static const int _maxHikers = 10; // sama dengan batas di database
+  static const int _daysToShow = 14;
+
+  late final List<DateTime> _dates;
+  late DateTime _selectedDate;
+  int _hikerCount = 2;
+
+  @override
+  void initState() {
+    super.initState();
+    // Mulai dari BESOK (server menolak tanggal hari ini / yang sudah lewat).
+    final now = DateTime.now();
+    _dates = List.generate(
+      _daysToShow,
+      (i) => DateTime(now.year, now.month, now.day + 1 + i),
+    );
+    _selectedDate = _dates.first;
+  }
+
+  void _changeCount(int delta) {
+    final next = _hikerCount + delta;
+    if (next < _minHikers || next > _maxHikers) return;
+    setState(() => _hikerCount = next);
   }
 
   @override
   Widget build(BuildContext context) {
-    final int total = mountain.price * selectedHikerCount;
+    final mountain = widget.mountain;
+    final int subtotal = mountain.price * _hikerCount;
+    final int total = subtotal + BookingService.serviceFee;
 
     return Scaffold(
       backgroundColor: const Color(0xFFE3F2FD),
@@ -63,10 +83,10 @@ class TicketPage extends StatelessWidget {
                         child: SizedBox(
                           width: 60,
                           height: 60,
-                          child: Image.asset(
-                            mountain.thumbnail,
+                          child: AppImage(
+                            path: mountain.thumbnail,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Container(
+                            fallback: Container(
                               color: const Color(0xFFBBDEFB),
                               child: const Icon(Icons.terrain, color: Color(0xFF42A5F5)),
                             ),
@@ -109,10 +129,10 @@ class TicketPage extends StatelessWidget {
                     children: [
                       AspectRatio(
                         aspectRatio: 16 / 9,
-                        child: Image.asset(
-                          mountain.thumbnail,
+                        child: AppImage(
+                          path: mountain.thumbnail,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
+                          fallback: Container(
                             color: const Color(0xFFBBDEFB),
                             alignment: Alignment.center,
                             child: const Icon(Icons.terrain, size: 40, color: Color(0xFF42A5F5)),
@@ -131,7 +151,7 @@ class TicketPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // Pilihan tanggal (visual)
+                // Pilihan tanggal
                 const Text('Pilih Tanggal',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF263238))),
                 const SizedBox(height: 10),
@@ -139,19 +159,19 @@ class TicketPage extends StatelessWidget {
                   height: 82,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
-                    children: const [
-                      _DateChip(day: '13', month: 'Okt', weekday: 'Sen', selected: false),
-                      _DateChip(day: '14', month: 'Okt', weekday: 'Sel', selected: false),
-                      _DateChip(day: '15', month: 'Okt', weekday: 'Rab', selected: true),
-                      _DateChip(day: '16', month: 'Okt', weekday: 'Kam', selected: false),
-                      _DateChip(day: '17', month: 'Okt', weekday: 'Jum', selected: false),
-                      _DateChip(day: '18', month: 'Okt', weekday: 'Sab', selected: false),
+                    children: [
+                      for (final date in _dates)
+                        _DateChip(
+                          date: date,
+                          selected: date == _selectedDate,
+                          onTap: () => setState(() => _selectedDate = date),
+                        ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // Jumlah pendaki (visual)
+                // Jumlah pendaki
                 const Text('Jumlah Pendaki',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF263238))),
                 const SizedBox(height: 10),
@@ -176,16 +196,24 @@ class TicketPage extends StatelessWidget {
                       ),
                       Row(
                         children: [
-                          _StepperButton(icon: Icons.remove),
+                          _StepperButton(
+                            icon: Icons.remove,
+                            enabled: _hikerCount > _minHikers,
+                            onTap: () => _changeCount(-1),
+                          ),
                           Container(
                             width: 36,
                             alignment: Alignment.center,
                             child: Text(
-                              '$selectedHikerCount',
+                              '$_hikerCount',
                               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF263238)),
                             ),
                           ),
-                          _StepperButton(icon: Icons.add),
+                          _StepperButton(
+                            icon: Icons.add,
+                            enabled: _hikerCount < _maxHikers,
+                            onTap: () => _changeCount(1),
+                          ),
                         ],
                       ),
                     ],
@@ -206,18 +234,21 @@ class TicketPage extends StatelessWidget {
                   child: Column(
                     children: [
                       _SummaryRow(
-                        label: 'Tiket x $selectedHikerCount',
-                        value: _formatPrice(mountain.price * selectedHikerCount),
+                        label: 'Tiket x $_hikerCount',
+                        value: formatRupiah(subtotal),
                       ),
                       const SizedBox(height: 8),
-                      const _SummaryRow(label: 'Biaya Layanan', value: 'Rp5.000'),
+                      _SummaryRow(
+                        label: 'Biaya Layanan',
+                        value: formatRupiah(BookingService.serviceFee),
+                      ),
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 10),
                         child: Divider(height: 1, color: Color(0xFF90CAF9)),
                       ),
                       _SummaryRow(
                         label: 'Total',
-                        value: _formatPrice(total + 5000),
+                        value: formatRupiah(total),
                         bold: true,
                       ),
                     ],
@@ -240,8 +271,8 @@ class TicketPage extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (context) => HikerDataPage(
                           mountain: mountain,
-                          hikerCount: selectedHikerCount,
-                          dateLabel: selectedDateFull,
+                          hikerCount: _hikerCount,
+                          hikeDate: _selectedDate,
                         ),
                       ),
                     );
@@ -265,38 +296,42 @@ class TicketPage extends StatelessWidget {
 }
 
 class _DateChip extends StatelessWidget {
-  final String day;
-  final String month;
-  final String weekday;
+  final DateTime date;
   final bool selected;
+  final VoidCallback onTap;
 
-  const _DateChip({required this.day, required this.month, required this.weekday, required this.selected});
+  const _DateChip({required this.date, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 56,
-      margin: const EdgeInsets.only(right: 10),
-      padding: const EdgeInsets.symmetric(vertical: 9),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFF1E88E5) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: selected ? const Color(0xFF1E88E5) : const Color(0xFFBBDEFB)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(weekday, style: TextStyle(fontSize: 10, color: selected ? Colors.white70 : const Color(0xFF78909C))),
-          const SizedBox(height: 4),
-          Text(day,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: selected ? Colors.white : const Color(0xFF263238),
-              )),
-          Text(month, style: TextStyle(fontSize: 10, color: selected ? Colors.white70 : const Color(0xFF78909C))),
-        ],
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 56,
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF1E88E5) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: selected ? const Color(0xFF1E88E5) : const Color(0xFFBBDEFB)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(weekdayShortId(date),
+                style: TextStyle(fontSize: 10, color: selected ? Colors.white70 : const Color(0xFF78909C))),
+            const SizedBox(height: 4),
+            Text('${date.day}',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white : const Color(0xFF263238),
+                )),
+            Text(monthShortId(date),
+                style: TextStyle(fontSize: 10, color: selected ? Colors.white70 : const Color(0xFF78909C))),
+          ],
+        ),
       ),
     );
   }
@@ -304,18 +339,28 @@ class _DateChip extends StatelessWidget {
 
 class _StepperButton extends StatelessWidget {
   final IconData icon;
-  const _StepperButton({required this.icon});
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _StepperButton({required this.icon, required this.enabled, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 30,
-      height: 30,
-      decoration: BoxDecoration(
-        color: const Color(0xFFE1F5FE),
-        borderRadius: BorderRadius.circular(10),
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE1F5FE),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          icon,
+          size: 16,
+          color: enabled ? const Color(0xFF1E88E5) : const Color(0xFFB0BEC5),
+        ),
       ),
-      child: Icon(icon, size: 16, color: const Color(0xFF1E88E5)),
     );
   }
 }

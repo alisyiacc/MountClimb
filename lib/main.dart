@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'pages/home_page.dart';
+import 'pages/login_page.dart';
+import 'services/api_client.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Muat sesi login yang tersimpan (kalau ada) sebelum aplikasi tampil.
+  await ApiClient.instance.init();
   runApp(const MountClimbApp());
 }
 
@@ -15,7 +20,8 @@ class MountClimbApp extends StatelessWidget {
       title: 'MountClimb',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const HomePage(),
+      // Sudah login -> Home, belum login -> halaman Login.
+      home: ApiClient.instance.isLoggedIn ? const HomePage() : const LoginPage(),
       // Supaya aplikasi menyesuaikan diri di mana pun dijalankan: di HP
       // (Android/iOS) tampilan tetap penuh seperti biasa, sedangkan kalau
       // dijalankan di Chrome pada laptop/monitor lebar, kontennya otomatis

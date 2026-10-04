@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_image.dart';
 
 // Widget slider foto menggunakan PageView bawaan Flutter (tanpa library
 // tambahan). Dibuat sebagai StatelessWidget: halaman aktif untuk indikator
@@ -35,21 +36,20 @@ class ImageSlider extends StatelessWidget {
                 _currentPage.value = index;
               },
               itemBuilder: (context, index) {
-                return Image.asset(
-                  images[index],
+                // AppImage: bisa asset lokal ATAU URL dari database.
+                return AppImage(
+                  path: images[index],
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    // Placeholder jika gambar belum tersedia di assets.
-                    return Container(
-                      color: Colors.blue.shade100,
-                      alignment: Alignment.center,
-                      child: Icon(
-                        Icons.terrain,
-                        size: 48,
-                        color: Colors.blue.shade400,
-                      ),
-                    );
-                  },
+                  // Placeholder jika gambar belum tersedia.
+                  fallback: Container(
+                    color: Colors.blue.shade100,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.terrain,
+                      size: 48,
+                      color: Colors.blue.shade400,
+                    ),
+                  ),
                 );
               },
             ),

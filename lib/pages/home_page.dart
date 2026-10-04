@@ -3,11 +3,35 @@ import '../models/mountain.dart';
 import '../theme/app_colors.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/mountain_card.dart';
+import '../widgets/state_views.dart';
+import '../services/mountain_service.dart';
 import 'explore_page.dart';
 import 'mountain_detail_page.dart';
 
-class HomePage extends StatelessWidget {
+// Home: daftar "Destinasi Populer" diambil dari Supabase
+// (GET /rest/v1/mountains). Dibuat StatefulWidget karena perlu
+// memuat data dari internet & bisa "Coba Lagi" kalau gagal.
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  late Future<List<Mountain>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = MountainService.getMountains(limit: 10);
+  }
+
+  void _reload() {
+    setState(() {
+      _future = MountainService.getMountains(limit: 10);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -206,21 +230,44 @@ class HomePage extends StatelessWidget {
 
             SizedBox(
               height: 240,
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                scrollDirection: Axis.horizontal,
-                itemCount: dummyMountains.length,
-                itemBuilder: (context, index) {
-                  final mountain = dummyMountains[index];
-                  return MountainCard(
-                    mountain: mountain,
-                    isTopPick: index == 0,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => MountainDetailPage(mountain: mountain),
-                        ),
+              child: FutureBuilder<List<Mountain>>(
+                future: _future,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const LoadingView(height: 240);
+                  }
+                  if (snapshot.hasError) {
+                    return ErrorView(
+                      message: errorText(snapshot.error!),
+                      onRetry: _reload,
+                    );
+                  }
+                  final mountains = snapshot.data ?? const <Mountain>[];
+                  if (mountains.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Belum ada data gunung.',
+                        style: TextStyle(fontSize: 13, color: Color(0xFF78909C)),
+                      ),
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: mountains.length,
+                    itemBuilder: (context, index) {
+                      final mountain = mountains[index];
+                      return MountainCard(
+                        mountain: mountain,
+                        isTopPick: index == 0,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => MountainDetailPage(mountain: mountain),
+                            ),
+                          );
+                        },
                       );
                     },
                   );

@@ -1,20 +1,13 @@
 import 'package:flutter/material.dart';
-import '../models/mountain.dart';
+import '../models/booking.dart';
+import '../utils/format.dart';
 import 'my_ticket_page.dart';
 
+// Menampilkan tiket yang BARU dibuat oleh server (kode booking asli dari database).
 class BookingSuccessPage extends StatelessWidget {
-  final Mountain mountain;
-  final int hikerCount;
-  final String dateLabel;
+  final Booking booking;
 
-  const BookingSuccessPage({
-    super.key,
-    required this.mountain,
-    required this.hikerCount,
-    required this.dateLabel,
-  });
-
-  static const String bookingCode = 'HKG-240915-A1';
+  const BookingSuccessPage({super.key, required this.booking});
 
   @override
   Widget build(BuildContext context) {
@@ -60,8 +53,8 @@ class BookingSuccessPage extends StatelessWidget {
                   children: [
                     const Text('Kode Booking', style: TextStyle(fontSize: 11.5, color: Color(0xFF78909C))),
                     const SizedBox(height: 4),
-                    const Text(
-                      bookingCode,
+                    Text(
+                      booking.bookingCode,
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1E88E5), letterSpacing: 1),
                     ),
                   ],
@@ -82,11 +75,13 @@ class BookingSuccessPage extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _InfoLine(icon: Icons.terrain, label: mountain.name),
+                    _InfoLine(icon: Icons.terrain, label: booking.mountainName),
                     const SizedBox(height: 10),
-                    _InfoLine(icon: Icons.calendar_today_outlined, label: dateLabel),
+                    _InfoLine(icon: Icons.calendar_today_outlined, label: booking.date),
                     const SizedBox(height: 10),
-                    _InfoLine(icon: Icons.groups_outlined, label: '$hikerCount Pendaki'),
+                    _InfoLine(icon: Icons.groups_outlined, label: '${booking.hikerCount} Pendaki'),
+                    const SizedBox(height: 10),
+                    _InfoLine(icon: Icons.payments_outlined, label: 'Total ${formatRupiah(booking.total)}'),
                   ],
                 ),
               ),

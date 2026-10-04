@@ -1,10 +1,72 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/mountain.dart';
+import '../services/mountain_service.dart';
+import '../utils/format.dart';
+import '../widgets/app_image.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/state_views.dart';
 import 'mountain_detail_page.dart';
 
-class ExplorePage extends StatelessWidget {
+// Explore: daftar gunung + pencarian + filter tingkat kesulitan.
+// Filter & pencarian dikerjakan SERVER (query PostgREST), bukan di HP:
+//   GET /rest/v1/mountains?difficulty=eq.Mudah
+//   GET /rest/v1/mountains?or=(name.ilike.*semeru*,location.ilike.*semeru*)
+class ExplorePage extends StatefulWidget {
   const ExplorePage({super.key});
+
+  @override
+  State<ExplorePage> createState() => _ExplorePageState();
+}
+
+class _ExplorePageState extends State<ExplorePage> {
+  static const List<String> _categories = ['Semua', 'Mudah', 'Sedang', 'Sulit'];
+
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounce;
+
+  String _difficulty = 'Semua';
+  String _keyword = '';
+  late Future<List<Mountain>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<List<Mountain>> _load() {
+    return MountainService.getMountains(difficulty: _difficulty, search: _keyword);
+  }
+
+  void _reload() {
+    setState(() {
+      _future = _load();
+    });
+  }
+
+  void _onSearchChanged(String value) {
+    // Tunggu pengguna berhenti mengetik 400 ms supaya tidak spam request.
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      _keyword = value.trim();
+      if (mounted) _reload();
+    });
+  }
+
+  void _selectCategory(String category) {
+    if (category == _difficulty) return;
+    _difficulty = category;
+    _reload();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,9 +91,9 @@ class ExplorePage extends StatelessWidget {
             ),
             const SizedBox(height: 18),
 
-            // Search bar (visual saja)
+            // Search bar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -44,49 +106,89 @@ class ExplorePage extends StatelessWidget {
                 ],
               ),
               child: Row(
-                children: const [
-                  Icon(Icons.search, color: Color(0xFF78909C)),
-                  SizedBox(width: 10),
-                  Text(
-                    'Cari nama gunung atau lokasi...',
-                    style: TextStyle(color: Color(0xFF90A4AE), fontSize: 14),
+                children: [
+                  const Icon(Icons.search, color: Color(0xFF78909C)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      textInputAction: TextInputAction.search,
+                      style: const TextStyle(fontSize: 14, color: Color(0xFF263238)),
+                      decoration: const InputDecoration(
+                        hintText: 'Cari nama gunung atau lokasi...',
+                        hintStyle: TextStyle(color: Color(0xFF90A4AE), fontSize: 14),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 18),
 
-            // Kategori sederhana (visual saja, tidak filter data)
+            // Kategori tingkat kesulitan
             SizedBox(
               height: 38,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
-                  _CategoryChip(label: 'Semua', selected: true),
-                  _CategoryChip(label: 'Mudah', selected: false),
-                  _CategoryChip(label: 'Sedang', selected: false),
-                  _CategoryChip(label: 'Sulit', selected: false),
+                  for (final c in _categories)
+                    _CategoryChip(
+                      label: c,
+                      selected: c == _difficulty,
+                      onTap: () => _selectCategory(c),
+                    ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
 
-            // Daftar gunung
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: dummyMountains.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 14),
-              itemBuilder: (context, index) {
-                final mountain = dummyMountains[index];
-                return _MountainListTile(
-                  mountain: mountain,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => MountainDetailPage(mountain: mountain),
+            // Daftar gunung dari Supabase
+            FutureBuilder<List<Mountain>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const LoadingView();
+                }
+                if (snapshot.hasError) {
+                  return ErrorView(
+                    message: errorText(snapshot.error!),
+                    onRetry: _reload,
+                  );
+                }
+                final mountains = snapshot.data ?? const <Mountain>[];
+                if (mountains.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.only(top: 40),
+                    child: Center(
+                      child: Text(
+                        'Gunung tidak ditemukan.',
+                        style: TextStyle(fontSize: 13, color: Color(0xFF78909C)),
                       ),
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: mountains.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 14),
+                  itemBuilder: (context, index) {
+                    final mountain = mountains[index];
+                    return _MountainListTile(
+                      mountain: mountain,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => MountainDetailPage(mountain: mountain),
+                          ),
+                        );
+                      },
                     );
                   },
                 );
@@ -103,28 +205,36 @@ class ExplorePage extends StatelessWidget {
 class _CategoryChip extends StatelessWidget {
   final String label;
   final bool selected;
+  final VoidCallback onTap;
 
-  const _CategoryChip({required this.label, required this.selected});
+  const _CategoryChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFF1E88E5) : Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(
-          color: selected ? const Color(0xFF1E88E5) : const Color(0xFFBBDEFB),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF1E88E5) : Colors.white,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color: selected ? const Color(0xFF1E88E5) : const Color(0xFFBBDEFB),
+          ),
         ),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: selected ? Colors.white : const Color(0xFF546E7A),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : const Color(0xFF546E7A),
+          ),
         ),
       ),
     );
@@ -136,19 +246,6 @@ class _MountainListTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _MountainListTile({required this.mountain, required this.onTap});
-
-  String _formatPrice(int price) {
-    final str = price.toString();
-    final buffer = StringBuffer();
-    for (int i = 0; i < str.length; i++) {
-      final posFromRight = str.length - i;
-      buffer.write(str[i]);
-      if (posFromRight > 1 && posFromRight % 3 == 1) {
-        buffer.write('.');
-      }
-    }
-    return 'Rp$buffer';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -175,10 +272,10 @@ class _MountainListTile extends StatelessWidget {
               child: SizedBox(
                 width: 84,
                 height: 84,
-                child: Image.asset(
-                  mountain.thumbnail,
+                child: AppImage(
+                  path: mountain.thumbnail,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
+                  fallback: Container(
                     color: const Color(0xFFBBDEFB),
                     alignment: Alignment.center,
                     child: const Icon(Icons.terrain, color: Color(0xFF42A5F5)),
@@ -205,9 +302,12 @@ class _MountainListTile extends StatelessWidget {
                       const Icon(Icons.location_on_outlined,
                           size: 14, color: Color(0xFF78909C)),
                       const SizedBox(width: 2),
-                      Text(
-                        mountain.location,
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF78909C)),
+                      Expanded(
+                        child: Text(
+                          mountain.location,
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF78909C)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -241,8 +341,9 @@ class _MountainListTile extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             Text(
-              _formatPrice(mountain.price),
+              formatRupiah(mountain.price),
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,

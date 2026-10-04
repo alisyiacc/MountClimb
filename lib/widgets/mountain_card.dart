@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/mountain.dart';
 import '../theme/app_colors.dart';
+import 'app_image.dart';
 
 // Kartu gunung yang dipakai di Home Page & Explore Page.
 // StatelessWidget murni, hanya menampilkan data + callback ketika ditekan.
@@ -61,10 +62,10 @@ class MountainCard extends StatelessWidget {
                   child: SizedBox(
                     height: 116,
                     width: double.infinity,
-                    child: Image.asset(
-                      mountain.thumbnail,
+                    child: AppImage(
+                      path: mountain.thumbnail,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
+                      fallback: Container(
                         decoration: BoxDecoration(
                           gradient: AppColors.gradientPrimary,
                         ),

@@ -1,9 +1,39 @@
 import 'package:flutter/material.dart';
+import '../models/profile.dart';
+import '../services/auth_service.dart';
+import '../services/profile_service.dart';
 import '../widgets/bottom_nav.dart';
 import 'history_page.dart';
+import 'login_page.dart';
 
-class ProfilePage extends StatelessWidget {
+// Profil: nama & email dari tabel `profiles`
+//   GET /rest/v1/profiles?id=eq.<user-id>
+// Logout: POST /auth/v1/logout lalu hapus sesi di HP.
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  late Future<Profile> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ProfileService.getMyProfile();
+  }
+
+  Future<void> _logout() async {
+    await AuthService.signOut();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginPage()),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +53,7 @@ class ProfilePage extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Avatar & info dummy
+            // Avatar & info akun
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
@@ -45,23 +75,43 @@ class ProfilePage extends StatelessWidget {
                     child: Icon(Icons.person, size: 34, color: Color(0xFF1E88E5)),
                   ),
                   const SizedBox(width: 16),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sharul Maulana',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF263238),
-                        ),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        '24051214219@mhs.unesa.ac.id',
-                        style: TextStyle(fontSize: 12, color: Color(0xFF78909C)),
-                      ),
-                    ],
+                  Expanded(
+                    child: FutureBuilder<Profile>(
+                      future: _future,
+                      builder: (context, snapshot) {
+                        final profile = snapshot.data;
+                        final name = (profile != null && profile.fullName.isNotEmpty)
+                            ? profile.fullName
+                            : (snapshot.connectionState == ConnectionState.waiting
+                                ? 'Memuat...'
+                                : 'Pengguna MountClimb');
+                        final email = (profile != null && profile.email.isNotEmpty)
+                            ? profile.email
+                            : AuthService.email;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF263238),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              email,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF78909C)),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -102,7 +152,7 @@ class ProfilePage extends StatelessWidget {
               icon: Icons.logout,
               label: 'Logout',
               iconColor: const Color(0xFFE53935),
-              onTap: () {},
+              onTap: _logout,
             ),
           ],
         ),

@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
+  http: ^1.2.0                  # panggilan REST API ke Supabase
+  shared_preferences: ^2.2.0    # menyimpan sesi login di HP
 
 dev_dependencies:
   flutter_test:
